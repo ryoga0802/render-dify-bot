@@ -24,6 +24,8 @@ function verifySlackSignature(req) {
 
 // Slackイベント受信エンドポイント
 app.post('/slack/events', async (req, res) => {
+  console.log("📥 Slackイベントを受信しました");
+  console.log("🔍 リクエスト内容:", JSON.stringify(req.body, null, 2));
   if (!verifySlackSignature(req)) {
     return res.status(400).send('Invalid signature');
   }
