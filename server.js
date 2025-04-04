@@ -12,18 +12,34 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
+// Slack署名検証（timestampチェックあり）
 function verifySlackSignature(req) {
   const slackSignature = req.headers["x-slack-signature"];
   const requestBody = JSON.stringify(req.body);
   const timestamp = req.headers["x-slack-request-timestamp"];
+
+  // タイムスタンプが古すぎる（5分以上前）場合は拒否
+  const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 60 * 5;
+  if (parseInt(timestamp) < fiveMinutesAgo) {
+    console.error("🕒 署名が古すぎます");
+    return false;
+  }
+
   const sigBaseString = `v0:${timestamp}:${requestBody}`;
   const hmac = crypto.createHmac("sha256", process.env.SLACK_SIGNING_SECRET);
   hmac.update(sigBaseString);
   const mySignature = `v0=${hmac.digest("hex")}`;
-  return crypto.timingSafeEqual(
-    Buffer.from(mySignature),
-    Buffer.from(slackSignature)
+
+  const isValid = crypto.timingSafeEqual(
+    Buffer.from(mySignature, "utf8"),
+    Buffer.from(slackSignature, "utf8")
   );
+
+  if (!isValid) {
+    console.error("🛑 署名検証に失敗しました");
+  }
+
+  return isValid;
 }
 
 app.post("/slack/events", async (req, res) => {
@@ -31,7 +47,6 @@ app.post("/slack/events", async (req, res) => {
   console.log("🔍 リクエスト内容:", JSON.stringify(req.body, null, 2));
 
   if (!verifySlackSignature(req)) {
-    console.error("🛑 署名検証に失敗しました");
     return res.status(400).send("Invalid signature");
   }
 
@@ -47,7 +62,7 @@ app.post("/slack/events", async (req, res) => {
     console.log("🚀 app_mention を検出！");
 
     try {
-      // メンション除去：「<@Uxxxxxxx> あああ」→「あああ」
+      // メンション部分（<@Uxxxxxx>）を除去してテキストだけにする
       const cleanedText = event.text.replace(/<@[^>]+>\s*/, "");
 
       const message = {
