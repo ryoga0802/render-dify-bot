@@ -1,34 +1,37 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits } = require("discord.js");
+
+const { Client, GatewayIntentBits, Partials, Events } = require("discord.js");
+const axios = require("axios");
 
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds, // サーバー関連
-    GatewayIntentBits.GuildMessages, // チャンネル内メッセージ
-    GatewayIntentBits.MessageContent, // メッセージ本文を読む
-    GatewayIntentBits.DirectMessages // DMのメッセージも拾う
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages // ← DMに反応するために必須
   ],
+  partials: [Partials.Channel] // ← DMチャンネルは"partial"だからこれも必要！
 });
 
-client.once("ready", () => {
+client.once(Events.ClientReady, () => {
   console.log(`🤖 Discord Bot起動完了！ログイン中: ${client.user.tag}`);
 });
 
-client.on("messageCreate", async (message) => {
-  // Bot自身や他のBotは無視
+client.on(Events.MessageCreate, async (message) => {
+  // Bot自身の発言には反応しない
   if (message.author.bot) return;
 
-  // 画像＋テキスト or どちらかだけ
-  const text = message.content.trim();
-  const hasImage = message.attachments.size > 0;
+  console.log("📥 メッセージ受信");
+  console.log(`👤 From: ${message.author.tag}`);
+  console.log(`📄 内容: ${message.content}`);
+  console.log(`📍 チャンネルタイプ: ${message.channel.type}`);
 
-  console.log("🟦 質問を受信");
-  console.log("👤 ユーザーID:", message.author.id);
-  console.log("📝 内容:", text || "(テキストなし)");
-  console.log("🖼 添付画像:", hasImage ? message.attachments.first().url : "なし");
-
-  // テスト返信
-  await message.reply("こんにちは！質問を受け取りました 🙌");
+  try {
+    await message.reply("こんにちは！質問を受け取りました 🙌");
+    console.log("✅ 返信完了");
+  } catch (err) {
+    console.error("❌ 返信エラー:", err);
+  }
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
