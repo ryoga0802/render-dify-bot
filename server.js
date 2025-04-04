@@ -60,10 +60,8 @@ app.post("/slack/events", async (req, res) => {
 
       console.log("✅ Slackへの返信に成功！");
     } catch (err) {
-      console.error(
-        "❌ Slackへの返信に失敗：",
-        err.response?.data || err.message
-      );
+      console.error("❌ Slackへの返信に失敗：", err.response?.data || err.message);
+      console.error("🐞 フルエラー詳細：", JSON.stringify(err, null, 2));
     }
 
     return res.status(200).send("OK");
