@@ -1,6 +1,6 @@
 /** @format */
 
-require("dotenv").config(); // ← .env 読み込み
+require("dotenv").config();
 
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -12,7 +12,6 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// Slack署名検証（セキュリティ用）
 function verifySlackSignature(req) {
   const slackSignature = req.headers["x-slack-signature"];
   const requestBody = JSON.stringify(req.body);
@@ -27,12 +26,12 @@ function verifySlackSignature(req) {
   );
 }
 
-// Slackイベント受信エンドポイント
 app.post("/slack/events", async (req, res) => {
   console.log("📥 Slackイベントを受信しました");
   console.log("🔍 リクエスト内容:", JSON.stringify(req.body, null, 2));
 
   if (!verifySlackSignature(req)) {
+    console.error("🛑 署名検証に失敗しました");
     return res.status(400).send("Invalid signature");
   }
 
@@ -41,30 +40,33 @@ app.post("/slack/events", async (req, res) => {
   }
 
   const event = req.body.event;
-  console.log("🧩 eventオブジェクト:", event); // ← 追加
+  console.log("🧩 eventオブジェクト:", event);
+  console.log("📎 event.type:", event?.type);
 
   if (event && event.type === "app_mention") {
     console.log("🚀 app_mention を検出！");
-    
+
     try {
+      // メンション除去：「<@Uxxxxxxx> あああ」→「あああ」
+      const cleanedText = event.text.replace(/<@[^>]+>\s*/, "");
+
       const message = {
         channel: event.channel,
-        text: `こんにちは！受信しました：${event.text}`,
+        text: `こんにちは！受信しました：「${cleanedText}」`,
       };
 
-      await axios.post("https://slack.com/api/chat.postMessage", message, {
+      console.log("📤 Slackへ送信開始");
+
+      const response = await axios.post("https://slack.com/api/chat.postMessage", message, {
         headers: {
           Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
           "Content-Type": "application/json",
         },
       });
 
-      console.log("✅ Slackへの返信に成功！");
+      console.log("✅ Slackへの返信に成功！レスポンス:", response.data);
     } catch (err) {
-      console.error(
-        "❌ Slackへの返信に失敗：",
-        err.response?.data || err.message
-      );
+      console.error("❌ Slackへの返信に失敗：", err.response?.data || err.message);
       console.error("🐞 フルエラー詳細：", JSON.stringify(err, null, 2));
     }
 
