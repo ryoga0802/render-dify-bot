@@ -12,13 +12,12 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// Slack署名検証（timestampチェックあり）
+// Slack署名検証（timestamp検証付き）
 function verifySlackSignature(req) {
   const slackSignature = req.headers["x-slack-signature"];
   const requestBody = JSON.stringify(req.body);
   const timestamp = req.headers["x-slack-request-timestamp"];
 
-  // タイムスタンプが古すぎる（5分以上前）場合は拒否
   const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 60 * 5;
   if (parseInt(timestamp) < fiveMinutesAgo) {
     console.error("🕒 署名が古すぎます");
@@ -42,53 +41,53 @@ function verifySlackSignature(req) {
   return isValid;
 }
 
-app.post("/slack/events", async (req, res) => {
+// メインのエンドポイント
+app.post("/slack/events", (req, res) => {
   console.log("📥 Slackイベントを受信しました");
-  console.log("🔍 リクエスト内容:", JSON.stringify(req.body, null, 2));
 
-  if (!verifySlackSignature(req)) {
-    return res.status(400).send("Invalid signature");
-  }
-
+  // URL確認イベント（最初の1回だけ）
   if (req.body.type === "url_verification") {
+    console.log("🌐 URL検証リクエスト");
     return res.send(req.body.challenge);
   }
 
+  // まずすぐ200返す（再送対策）
+  res.status(200).send("OK");
+
+  // 検証（200返したあとにするのがコツ）
+  if (!verifySlackSignature(req)) {
+    console.log("🚫 無効な署名でした（でもSlackにはOK返してる）");
+    return;
+  }
+
   const event = req.body.event;
-  console.log("🧩 eventオブジェクト:", event);
-  console.log("📎 event.type:", event?.type);
 
-  if (event && event.type === "app_mention") {
-    console.log("🚀 app_mention を検出！");
+  if (event?.type === "app_mention") {
+    console.log("🚀 メンションイベント検出");
 
-    try {
-      // メンション部分（<@Uxxxxxx>）を除去してテキストだけにする
-      const cleanedText = event.text.replace(/<@[^>]+>\s*/, "");
+    const cleanedText = event.text.replace(/<@[^>]+>\s*/, "");
 
-      const message = {
-        channel: event.channel,
-        text: `こんにちは！受信しました：「${cleanedText}」`,
-      };
+    const message = {
+      channel: event.channel,
+      text: `こんにちは！受信しました：「${cleanedText}」`,
+    };
 
-      console.log("📤 Slackへ送信開始");
-
-      const response = await axios.post("https://slack.com/api/chat.postMessage", message, {
+    axios
+      .post("https://slack.com/api/chat.postMessage", message, {
         headers: {
           Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
           "Content-Type": "application/json",
         },
+      })
+      .then((response) => {
+        console.log("✅ Slackへの返信成功:", response.data);
+      })
+      .catch((err) => {
+        console.error("❌ Slackへの返信失敗:", err.response?.data || err.message);
       });
-
-      console.log("✅ Slackへの返信に成功！レスポンス:", response.data);
-    } catch (err) {
-      console.error("❌ Slackへの返信に失敗：", err.response?.data || err.message);
-      console.error("🐞 フルエラー詳細：", JSON.stringify(err, null, 2));
-    }
-
-    return res.status(200).send("OK");
+  } else {
+    console.log("⚠️ 未対応のイベントタイプ:", event?.type);
   }
-
-  return res.status(200).send("No action");
 });
 
 app.listen(port, () => {
