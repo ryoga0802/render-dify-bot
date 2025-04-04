@@ -1,75 +1,34 @@
-const express = require("express");
-const crypto = require("crypto");
-const axios = require("axios");
-const bodyParser = require("body-parser");
-const app = express();
-const port = process.env.PORT || 3000;
+require("dotenv").config();
+const { Client, GatewayIntentBits } = require("discord.js");
 
-// 👇 raw body を取得するためのミドルウェア
-app.use(
-  "/slack/events",
-  bodyParser.raw({ type: "*/*" }) // ← これ重要！
-);
-
-// 👇署名検証（rawBodyで判定）
-function verifySlackSignature(req) {
-  const slackSignature = req.headers["x-slack-signature"];
-  const timestamp = req.headers["x-slack-request-timestamp"];
-  const rawBody = req.body.toString("utf8");
-
-  const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 60 * 5;
-  if (parseInt(timestamp) < fiveMinutesAgo) {
-    console.error("🕒 署名が古すぎます");
-    return false;
-  }
-
-  const sigBaseString = `v0:${timestamp}:${rawBody}`;
-  const hmac = crypto.createHmac("sha256", process.env.SLACK_SIGNING_SECRET);
-  hmac.update(sigBaseString);
-  const mySignature = `v0=${hmac.digest("hex")}`;
-
-  const isValid = crypto.timingSafeEqual(
-    Buffer.from(mySignature, "utf8"),
-    Buffer.from(slackSignature, "utf8")
-  );
-
-  if (!isValid) {
-    console.error("🛑 署名検証に失敗しました");
-  }
-
-  return isValid;
-}
-
-// 👇Slackイベントハンドラ
-app.post("/slack/events", async (req, res) => {
-  res.status(200).send("OK");
-
-  if (!verifySlackSignature(req)) {
-    return;
-  }
-
-  // 👇 rawをJSONに戻す
-  const body = JSON.parse(req.body.toString("utf8"));
-  const event = body.event;
-
-  if (event?.type === "app_mention") {
-    const cleanedText = event.text.replace(/<@[^>]+>\s*/, "");
-    const message = {
-      channel: event.channel,
-      text: `こんにちは！受信しました：「${cleanedText}」`,
-    };
-
-    await axios.post("https://slack.com/api/chat.postMessage", message, {
-      headers: {
-        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    console.log("✅ Slackへの返信完了");
-  }
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds, // サーバー関連
+    GatewayIntentBits.GuildMessages, // チャンネル内メッセージ
+    GatewayIntentBits.MessageContent, // メッセージ本文を読む
+    GatewayIntentBits.DirectMessages // DMのメッセージも拾う
+  ],
 });
 
-app.listen(port, () => {
-  console.log(`Bot is running on port ${port}`);
+client.once("ready", () => {
+  console.log(`🤖 Discord Bot起動完了！ログイン中: ${client.user.tag}`);
 });
+
+client.on("messageCreate", async (message) => {
+  // Bot自身や他のBotは無視
+  if (message.author.bot) return;
+
+  // 画像＋テキスト or どちらかだけ
+  const text = message.content.trim();
+  const hasImage = message.attachments.size > 0;
+
+  console.log("🟦 質問を受信");
+  console.log("👤 ユーザーID:", message.author.id);
+  console.log("📝 内容:", text || "(テキストなし)");
+  console.log("🖼 添付画像:", hasImage ? message.attachments.first().url : "なし");
+
+  // テスト返信
+  await message.reply("こんにちは！質問を受け取りました 🙌");
+});
+
+client.login(process.env.DISCORD_BOT_TOKEN);
