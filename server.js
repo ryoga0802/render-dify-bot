@@ -36,15 +36,16 @@ app.post("/slack/events", async (req, res) => {
     return res.status(400).send("Invalid signature");
   }
 
-  // SlackのURL確認用イベント（Slackが検証用に送ってくる）
   if (req.body.type === "url_verification") {
     return res.send(req.body.challenge);
   }
 
   const event = req.body.event;
+  console.log("🧩 eventオブジェクト:", event); // ← 追加
 
-  // メンションイベントが来たら返信
   if (event && event.type === "app_mention") {
+    console.log("🚀 app_mention を検出！");
+    
     try {
       const message = {
         channel: event.channel,
@@ -60,14 +61,16 @@ app.post("/slack/events", async (req, res) => {
 
       console.log("✅ Slackへの返信に成功！");
     } catch (err) {
-      console.error("❌ Slackへの返信に失敗：", err.response?.data || err.message);
+      console.error(
+        "❌ Slackへの返信に失敗：",
+        err.response?.data || err.message
+      );
       console.error("🐞 フルエラー詳細：", JSON.stringify(err, null, 2));
     }
 
     return res.status(200).send("OK");
   }
 
-  // その他のイベントに対しては何もしない
   return res.status(200).send("No action");
 });
 
