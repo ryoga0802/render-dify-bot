@@ -31,24 +31,20 @@ function verifySlackSignature(req) {
 app.post("/slack/events", async (req, res) => {
   console.log("📥 Slackイベントを受信しました");
   console.log("🔍 リクエスト内容:", JSON.stringify(req.body, null, 2));
+
   if (!verifySlackSignature(req)) {
     return res.status(400).send("Invalid signature");
   }
 
-  const event = req.body.event;
-
-  // SlackのURL確認用イベント
+  // SlackのURL確認用イベント（Slackが検証用に送ってくる）
   if (req.body.type === "url_verification") {
     return res.send(req.body.challenge);
   }
 
-  // メンションイベントが来たら返信（テスト用）
-  if (event && event.type === "app_mention") {
-    const message = {
-      channel: event.channel,
-      text: `こんにちは！受信しました：${event.text}`,
-    };
+  const event = req.body.event;
 
+  // メンションイベントが来たら返信
+  if (event && event.type === "app_mention") {
     try {
       const message = {
         channel: event.channel,
@@ -73,7 +69,8 @@ app.post("/slack/events", async (req, res) => {
     return res.status(200).send("OK");
   }
 
-  res.status(200).send("No action");
+  // その他のイベントに対しては何もしない
+  return res.status(200).send("No action");
 });
 
 app.listen(port, () => {
